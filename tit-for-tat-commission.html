@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tit-for-Tat: Commission Spiral</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg:      #f5f2eb;
+  --surface: #fffdf8;
+  --surface2:#edeae2;
+  --border:  #d4cfc4;
+  --ink:     #1a1510;
+  --red:     #c0392b;
+  --amber:   #d4831a;
+  --green:   #1a7a4a;
+  --blue:    #1a4a7a;
+  --purple:  #5a1a7a;
+  --muted:   #7a746a;
+  --rule:    #d4cfc4;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace;
+  min-height: 100vh;
+  padding: 0 0 80px;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 999;
+}
+
+/* ── MASTHEAD ── */
+.masthead {
+  background: var(--ink);
+  color: var(--bg);
+  padding: 44px 48px 36px;
+  border-bottom: 4px double var(--bg);
+  position: relative; overflow: hidden;
+}
+.masthead::after {
+  content: 'COMMISSION ECONOMICS';
+  position: absolute; right: -30px; top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  font-size: 9px; letter-spacing: 0.5em;
+  color: rgba(245,242,235,0.08);
+  white-space: nowrap; pointer-events: none;
+}
+.issue-line {
+  font-size: 9px; letter-spacing: 0.35em; text-transform: uppercase;
+  color: rgba(245,242,235,0.4);
+  margin-bottom: 18px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(245,242,235,0.12);
+  display: flex; justify-content: space-between;
+}
+.masthead h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(30px, 5vw, 60px); font-weight: 900;
+  line-height: 1.0; letter-spacing: -0.01em;
+}
+.masthead h1 em { font-style: italic; color: #c0a060; }
+.masthead-sub {
+  margin-top: 14px; font-size: 11px;
+  color: rgba(245,242,235,0.5); max-width: 520px; line-height: 1.7;
+}
+
+/* ── TAB BAR ── */
+.tab-bar {
+  max-width: 1100px; margin: 0 auto;
+  display: flex; border-bottom: 2px solid var(--ink);
+  padding: 0 24px;
+}
+.tab-btn {
+  padding: 14px 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; border-bottom: 3px solid transparent;
+  margin-bottom: -2px; transition: color 0.18s, border-color 0.18s;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { color: var(--ink); border-bottom-color: var(--red); }
+.tab-badge {
+  display: inline-block; margin-left: 7px; padding: 2px 6px;
+  border-radius: 2px; font-size: 8px; letter-spacing: 0.08em;
+  background: rgba(192,57,43,0.12); color: var(--red);
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── PAGE WRAPPER ── */
+.page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 0; }
+
+/* ── SHARED CONTROLS ── */
+.controls {
+  max-width: 1100px; margin: 0 auto 24px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap: 12px;
+}
+.control-card {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 14px 16px; border-radius: 3px;
+}
+.control-label {
+  font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+}
+.control-row { display: flex; align-items: center; gap: 10px; }
+input[type="range"] {
+  flex: 1; -webkit-appearance: none; height: 2px;
+  background: var(--border); border-radius: 2px; outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 13px; height: 13px;
+  border-radius: 50%; background: var(--red); cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(192,57,43,0.15);
+}
+.val { font-size: 13px; font-weight: 500; min-width: 46px; text-align: right; color: var(--amber); }
+
+/* ── GRID & CARDS ── */
+.grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 20px; }
+.card.full { grid-column: 1 / -1; }
+.card-title {
+  font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.chart-wrap { position: relative; height: 240px; }
+
+/* ── STATS ── */
+.stat-row {
+  display: grid; grid-template-columns: repeat(4,1fr);
+  gap: 10px; margin-bottom: 16px;
+  max-width: 1100px; margin-left: auto; margin-right: auto;
+}
+.adv-stat-row {
+  display: grid; grid-template-columns: repeat(5,1fr);
+  gap: 10px; margin-bottom: 16px;
+  max-width: 1100px; margin-left: auto; margin-right: auto;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 3px; padding: 14px; text-align: center;
+}
+.stat-label { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.stat-val { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 900; line-height: 1; }
+.stat-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+.c-red    { color: var(--red); }
+.c-amber  { color: var(--amber); }
+.c-green  { color: var(--green); }
+.c-blue   { color: var(--blue); }
+.c-purple { color: var(--purple); }
+
+/* ── SCENARIOS ── */
+.scenario-bar {
+  max-width: 1100px; margin: 0 auto 18px;
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;
+}
+.scenario {
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 14px 16px; cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+  background: var(--surface);
+}
+.scenario:hover, .scenario.active { border-color: var(--red); background: rgba(192,57,43,0.04); }
+.scenario-name { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.scenario-desc { font-size: 11px; color: var(--ink); line-height: 1.5; }
+
+/* ── PHASE DOTS ── */
+.phase-indicator { display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+.phase-dot { font-size: 9px; padding: 3px 8px; border-radius: 2px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ── INSIGHT BOX ── */
+.insight-box {
+  max-width: 1100px; margin: 16px auto 0;
+  padding: 16px 18px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 3px;
+  border-left: 3px solid var(--amber);
+}
+.insight-box .ib-label { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; }
+.insight-box p { font-size: 11px; line-height: 1.8; color: var(--ink); }
+
+/* ── SECTION LABEL ── */
+.section-label {
+  max-width: 1100px; margin: 0 auto 12px;
+  font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+
+/* ── TOOLTIP ── */
+.tip {
+  display: inline-block; width: 14px; height: 14px; line-height: 14px;
+  text-align: center; border-radius: 50%; border: 1px solid var(--muted);
+  color: var(--muted); font-size: 9px; cursor: help; margin-left: 5px;
+  vertical-align: middle; position: relative;
+}
+.tip:hover::after {
+  content: attr(data-tip); position: absolute; left: 20px; top: -4px;
+  background: var(--ink); border: 1px solid var(--border);
+  padding: 7px 11px; border-radius: 3px; font-size: 10px; color: var(--bg);
+  white-space: normal; width: 220px; z-index: 20; pointer-events: none;
+  line-height: 1.6;
+}
+
+/* ════════════════════════════════════
+   TAB 3 — EXPLAINER STYLES
+════════════════════════════════════ */
+.exp-page { max-width: 1100px; margin: 0 auto; padding: 36px 24px 0; }
+
+.exp-intro {
+  background: var(--ink); color: var(--bg);
+  padding: 28px 32px; margin-bottom: 36px;
+  border-radius: 3px; position: relative; overflow: hidden;
+}
+.exp-intro::after {
+  content: 'MODEL ANATOMY';
+  position: absolute; right: -20px; top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  font-size: 9px; letter-spacing: 0.5em;
+  color: rgba(245,242,235,0.06); white-space: nowrap; pointer-events: none;
+}
+.exp-intro-label { font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(245,242,235,0.4); margin-bottom: 12px; }
+.exp-intro h2 { font-family: 'Playfair Display', serif; font-size: clamp(22px,3.5vw,38px); font-weight: 900; line-height: 1.05; margin-bottom: 12px; }
+.exp-intro h2 em { font-style: italic; color: #c0a060; }
+.exp-intro p { font-size: 11px; color: rgba(245,242,235,0.55); line-height: 1.75; max-width: 640px; }
+
+/* Model overview cards */
+.model-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border: 2px solid var(--ink); margin-bottom: 36px; }
+.model-card { background: var(--surface); padding: 28px 30px; }
+.model-card.adv-card { background: var(--ink); color: var(--bg); }
+.model-card-label { font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 10px; opacity: 0.45; }
+.model-card h3 { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; margin-bottom: 12px; line-height: 1.2; }
+.model-card > p { font-size: 11px; line-height: 1.75; opacity: 0.7; margin-bottom: 16px; }
+.ing-list { list-style: none; }
+.ing-list li {
+  font-size: 10px; padding: 7px 0;
+  border-top: 1px solid var(--rule);
+  display: flex; gap: 10px; align-items: flex-start; line-height: 1.5;
+}
+.model-card.adv-card .ing-list li { border-color: rgba(245,242,235,0.13); }
+.ing-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; flex-shrink: 0; margin-top: 1px;
+}
+
+/* Formula blocks */
+.formula-block {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 4px solid var(--blue);
+  padding: 20px 24px; margin-bottom: 14px;
+}
+.formula-block.adv-fb { border-left-color: var(--red); }
+.formula-label-sm { font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.formula {
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  line-height: 2.1; color: var(--ink);
+}
+.fv  { color: var(--blue); font-weight: 500; }
+.fva { color: var(--red); font-weight: 500; }
+.fvw { color: var(--amber); font-weight: 500; }
+.fvp { color: var(--green); font-weight: 500; }
+.fop { color: var(--muted); }
+.fcm { color: var(--muted); font-size: 10px; }
+.formula-desc { margin-top: 10px; font-size: 10px; line-height: 1.7; color: var(--muted); padding-top: 10px; border-top: 1px solid var(--rule); }
+
+/* Factor mini-cards */
+.factor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.factor-card { background: var(--surface); border: 1px solid var(--rule); padding: 20px; position: relative; overflow: hidden; border-radius: 3px; }
+.factor-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.fc-amber::before { background: var(--amber); }
+.fc-purple::before { background: var(--purple); }
+.fc-green::before { background: var(--green); }
+.fc-blue::before { background: var(--blue); }
+.factor-title { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+.factor-sub { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 13px; }
+.factor-formula { font-size: 10px; background: var(--surface2); padding: 8px 10px; border-radius: 2px; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; line-height: 1.7; }
+.factor-chart-wrap { height: 130px; margin-bottom: 10px; }
+.factor-desc { font-size: 10px; line-height: 1.65; color: var(--muted); }
+
+/* Walkthrough */
+.walkthrough { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border: 2px solid var(--ink); margin-bottom: 36px; }
+.wt-col { padding: 28px; background: var(--surface); }
+.wt-col.wt-right { background: var(--surface2); }
+.wt-head { font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; margin-bottom: 20px; padding-bottom: 9px; border-bottom: 1px solid var(--rule); }
+.wt-step { display: flex; gap: 12px; margin-bottom: 16px; }
+.wt-num { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 900; color: var(--rule); line-height: 1; flex-shrink: 0; width: 28px; }
+.wt-body {}
+.wt-title { font-size: 11px; font-weight: 500; margin-bottom: 3px; }
+.wt-desc { font-size: 10px; color: var(--muted); line-height: 1.55; }
+.wt-code { font-size: 10px; background: var(--surface2); padding: 5px 8px; margin-top: 5px; border-radius: 2px; line-height: 1.6; }
+.wt-col.wt-right .wt-code { background: var(--surface); }
+
+/* Annotation strip */
+.ann-strip {
+  background: var(--ink); color: var(--bg);
+  padding: 22px 32px; margin: 28px 0;
+  display: flex; gap: 32px; align-items: center; border-radius: 3px;
+}
+.ann-item { flex: 1; }
+.ann-val { font-family: 'Playfair Display', serif; font-size: 30px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+.ann-lbl { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(245,242,235,0.45); }
+.ann-div { width: 1px; background: rgba(245,242,235,0.12); align-self: stretch; }
+
+/* Big compare chart */
+.big-chart-card { background: var(--surface); border: 1px solid var(--rule); padding: 24px; margin-bottom: 24px; border-radius: 3px; }
+.big-chart-title { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+.big-chart-sub { font-size: 10px; color: var(--muted); margin-bottom: 18px; }
+.big-chart-wrap { height: 280px; }
+
+/* Delta table */
+.delta-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 40px; }
+.delta-table th {
+  text-align: left; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--muted); padding: 9px 14px; border-bottom: 2px solid var(--ink); font-weight: 400;
+}
+.delta-table td { padding: 11px 14px; border-bottom: 1px solid var(--rule); line-height: 1.55; vertical-align: top; }
+.delta-table tr:hover td { background: var(--surface2); }
+.td-simple { color: var(--blue); }
+.td-adv    { color: var(--red); }
+.pill { display: inline-block; padding: 2px 7px; border-radius: 2px; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+.pill-h { background: rgba(192,57,43,0.1); color: var(--red); }
+.pill-m { background: rgba(212,131,26,0.1); color: var(--amber); }
+.pill-l { background: rgba(26,122,74,0.1); color: var(--green); }
+
+/* Exp section headers */
+.exp-section-head {
+  display: flex; align-items: baseline; gap: 14px;
+  margin: 40px 0 22px; padding-bottom: 10px; border-bottom: 2px solid var(--ink);
+}
+.exp-sec-num { font-family: 'Playfair Display', serif; font-size: 40px; font-weight: 900; line-height: 1; color: var(--rule); }
+.exp-sec-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; }
+.exp-sec-badge { margin-left: auto; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; padding: 3px 9px; border: 1px solid var(--red); color: var(--red); }
+
+/* Responsive */
+@media (max-width: 720px) {
+  .model-compare, .factor-grid, .walkthrough { grid-template-columns: 1fr; }
+  .masthead { padding: 28px 20px 24px; }
+  .page, .exp-page { padding-left: 16px; padding-right: 16px; }
+  .ann-strip { flex-direction: column; gap: 16px; }
+  .tab-bar { padding: 0 12px; }
+  .tab-btn { padding: 12px 14px; font-size: 9px; }
+}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="issue-line">
+    <span>Game Theory × Commission Economics</span>
+    <span>Three-Part Analysis · 12-Quarter Horizon</span>
+  </div>
+  <h1>The Commission<br><em>Death Spiral</em></h1>
+  <p class="masthead-sub">How tit-for-tat dynamics in saturated markets erode margins through escalating affiliate & channel commission spend — modelled, dissected, and compared.</p>
+</div>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('simple',this)">Simple Model</button>
+  <button class="tab-btn" onclick="switchTab('advanced',this)">Advanced Model <span class="tab-badge">+4 factors</span></button>
+  <button class="tab-btn" onclick="switchTab('explainer',this)">Model Anatomy <span class="tab-badge">how it works</span></button>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     TAB 1 — SIMPLE
+═══════════════════════════════════════════════════════ -->
+<div id="tab-simple" class="tab-panel active">
+<div class="page">
+
+  <div class="scenario-bar">
+    <div class="scenario active" onclick="setScenario('aggressive')" id="sc-aggressive">
+      <div class="scenario-name">Scenario A</div>
+      <div class="scenario-desc">Aggressive escalation — both players match every rate increase immediately</div>
+    </div>
+    <div class="scenario" onclick="setScenario('delayed')" id="sc-delayed">
+      <div class="scenario-name">Scenario B</div>
+      <div class="scenario-desc">Delayed retaliation — 2-quarter lag before matching competitor rates</div>
+    </div>
+    <div class="scenario" onclick="setScenario('defect')" id="sc-defect">
+      <div class="scenario-name">Scenario C</div>
+      <div class="scenario-desc">One player holds rate — asymmetric outcome with share shift</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="control-card">
+      <div class="control-label">Base Commission Rate (%)</div>
+      <div class="control-row"><input type="range" id="baseRate" min="5" max="25" value="12" oninput="updateSimple()"><span class="val" id="baseRateVal">12%</span></div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">Escalation Per Quarter (%pts)</div>
+      <div class="control-row"><input type="range" id="escalation" min="0.5" max="5" step="0.5" value="2" oninput="updateSimple()"><span class="val" id="escalationVal">2%</span></div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">Annual Revenue ($M)</div>
+      <div class="control-row"><input type="range" id="revenue" min="10" max="500" step="10" value="100" oninput="updateSimple()"><span class="val" id="revenueVal">$100M</span></div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">Commission-Driven Revenue (%)</div>
+      <div class="control-row"><input type="range" id="commShare" min="10" max="80" value="35" oninput="updateSimple()"><span class="val" id="commShareVal">35%</span></div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="stat-label">Year-3 Rate (You)</div><div class="stat-val c-red" id="s1">—</div><div class="stat-sub">commission %</div></div>
+    <div class="stat"><div class="stat-label">Cumulative Overspend</div><div class="stat-val c-amber" id="s2">—</div><div class="stat-sub">vs. stable baseline</div></div>
+    <div class="stat"><div class="stat-label">Margin Erosion</div><div class="stat-val c-red" id="s3">—</div><div class="stat-sub">pts over 3 years</div></div>
+    <div class="stat"><div class="stat-label">Net Market Gain</div><div class="stat-val c-green" id="s4">—</div><div class="stat-sub">share vs. cost</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card full">
+      <div class="card-title">Commission Rate Escalation — 12 Quarters</div>
+      <div class="chart-wrap"><canvas id="rateChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Annual Commission Spend ($M)</div>
+      <div class="chart-wrap" style="height:210px"><canvas id="spendChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Margin Impact vs. Stable Market</div>
+      <div class="chart-wrap" style="height:210px"><canvas id="marginChart"></canvas></div>
+    </div>
+    <div class="card full">
+      <div class="card-title">Cumulative Spend Premium — True Cost of the Spiral</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="premiumChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="insight-box">
+    <div class="ib-label">Key Insight</div>
+    <p id="insight"></p>
+    <div class="phase-indicator" id="phases"></div>
+  </div>
+
+</div>
+</div><!-- /tab-simple -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     TAB 2 — ADVANCED
+═══════════════════════════════════════════════════════ -->
+<div id="tab-advanced" class="tab-panel">
+<div class="page">
+
+  <div class="insight-box" style="margin-bottom:22px; border-left-color:var(--blue);">
+    <div class="ib-label">What this model adds over the simple version</div>
+    <p>Four real-world frictions layered on top: <strong style="color:var(--amber)">diminishing returns</strong> on conversion as rates inflate; <strong style="color:var(--purple)">affiliate rent extraction</strong> (the share captured by intermediaries, not customers); <strong style="color:var(--green)">demand elasticity segmentation</strong> between price-sensitive and loyal cohorts; and a <strong style="color:var(--blue)">coordinated rate floor</strong> modelling the market's cooperative escape valve.</p>
+  </div>
+
+  <div class="section-label">Base Parameters</div>
+  <div class="controls" style="margin-bottom:16px;">
+    <div class="control-card">
+      <div class="control-label">Base Commission Rate (%)</div>
+      <div class="control-row"><input type="range" id="a_baseRate" min="5" max="25" value="12" oninput="updateAdvanced()"><span class="val" id="a_baseRateVal">12%</span></div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">Escalation Per Quarter (%pts)</div>
+      <div class="control-row"><input type="range" id="a_escalation" min="0.5" max="5" step="0.5" value="2" oninput="updateAdvanced()"><span class="val" id="a_escalationVal">2%</span></div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">Annual Revenue ($M)</div>
+      <div class="control-row"><input type="range" id="a_revenue" min="10" max="500" step="10" value="100" oninput="updateAdvanced()"><span class="val" id="a_revenueVal">$100M</span></div>
+    </div>
+    <div class="control-card">
+      <div class="control-label">Commission-Driven Revenue (%)</div>
+      <div class="control-row"><input type="range" id="a_commShare" min="10" max="80" value="35" oninput="updateAdvanced()"><span class="val" id="a_commShareVal">35%</span></div>
+    </div>
+  </div>
+
+  <div class="section-label">Advanced Factors</div>
+  <div class="controls" style="margin-bottom:22px;">
+    <div class="control-card" style="border-color:rgba(212,131,26,0.4)">
+      <div class="control-label">Diminishing Returns Factor <span class="tip" data-tip="How quickly extra commission rate stops converting new customers. 0 = no saturation; 1 = strong. Formula: conv = 1 / (1 + factor × ΔRate / base).">?</span></div>
+      <div class="control-row"><input type="range" id="a_dimRet" min="0" max="1" step="0.05" value="0.4" oninput="updateAdvanced()"><span class="val" id="a_dimRetVal">0.4</span></div>
+    </div>
+    <div class="control-card" style="border-color:rgba(90,26,122,0.4)">
+      <div class="control-label">Affiliate Rent Extraction (%) <span class="tip" data-tip="% of each incremental rate increase above base captured by affiliates as pure margin, not translated into customer offers.">?</span></div>
+      <div class="control-row"><input type="range" id="a_rent" min="0" max="60" step="5" value="30" oninput="updateAdvanced()"><span class="val" id="a_rentVal">30%</span></div>
+    </div>
+    <div class="control-card" style="border-color:rgba(26,122,74,0.4)">
+      <div class="control-label">Price Elasticity of Demand <span class="tip" data-tip="How sensitive customers are to commission-driven offers. 0 = fully inelastic; 2 = highly elastic. Applied to incremental spend to estimate revenue uplift.">?</span></div>
+      <div class="control-row"><input type="range" id="a_elast" min="0" max="2" step="0.1" value="0.8" oninput="updateAdvanced()"><span class="val" id="a_elastVal">0.8</span></div>
+    </div>
+    <div class="control-card" style="border-color:rgba(26,74,122,0.4)">
+      <div class="control-label">Rate Floor Trigger (+pts above base) <span class="tip" data-tip="If spiral rates exceed base + this threshold, a coordinated market correction kicks in from Q9, pulling rates back toward base + floor/2.">?</span></div>
+      <div class="control-row"><input type="range" id="a_floor" min="2" max="20" step="1" value="8" oninput="updateAdvanced()"><span class="val" id="a_floorVal">8pts</span></div>
+    </div>
+  </div>
+
+  <div class="adv-stat-row">
+    <div class="stat"><div class="stat-label">Conversion Efficiency Y3</div><div class="stat-val c-amber" id="a_s1">—</div><div class="stat-sub">vs. baseline rate</div></div>
+    <div class="stat"><div class="stat-label">Affiliate Rent Captured</div><div class="stat-val c-purple" id="a_s2">—</div><div class="stat-sub">3yr total</div></div>
+    <div class="stat"><div class="stat-label">Commission ROI</div><div class="stat-val c-green" id="a_s3">—</div><div class="stat-sub">$ rev per $1 spent</div></div>
+    <div class="stat"><div class="stat-label">Rate Floor Triggered</div><div class="stat-val c-blue" id="a_s4">—</div><div class="stat-sub">escape valve active</div></div>
+    <div class="stat"><div class="stat-label">Extra vs Simple Model</div><div class="stat-val c-red" id="a_s5">—</div><div class="stat-sub">hidden overspend</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card full">
+      <div class="card-title">Commission Spend vs. Revenue Actually Generated by Channel ($M/qtr)</div>
+      <div class="chart-wrap"><canvas id="a_roiChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Conversion Efficiency — Diminishing Returns Over Time</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="a_convChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Affiliate Rent vs. Customer Value Created (Annual $M)</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="a_rentChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Elasticity Segments — Share Lift by Cohort</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="a_elastChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Rate Floor Scenario — Spiral vs. Coordinated Cap</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="a_floorChart"></canvas></div>
+    </div>
+    <div class="card full">
+      <div class="card-title">Simple vs. Advanced Model — Cumulative Overspend Comparison ($M)</div>
+      <div class="chart-wrap" style="height:190px"><canvas id="a_compareChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="insight-box" style="border-left-color:var(--red);">
+    <div class="ib-label">Advanced Model Verdict</div>
+    <p id="a_insight"></p>
+    <div class="phase-indicator" id="a_phases"></div>
+  </div>
+
+</div>
+</div><!-- /tab-advanced -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     TAB 3 — MODEL EXPLAINER
+═══════════════════════════════════════════════════════ -->
+<div id="tab-explainer" class="tab-panel">
+<div class="exp-page">
+
+  <div class="exp-intro">
+    <div class="exp-intro-label">Reference · Model Anatomy</div>
+    <h2>Anatomy of<br><em>Two Models</em></h2>
+    <p>A side-by-side dissection of the Simple and Advanced commission escalation models — what each assumes, how each is constructed, and precisely where they diverge. Use this tab to understand the logic before adjusting parameters in the interactive tabs above.</p>
+  </div>
+
+  <!-- Section 01 -->
+  <div class="exp-section-head">
+    <span class="exp-sec-num">01</span>
+    <span class="exp-sec-title">What Each Model Is</span>
+  </div>
+
+  <div class="model-compare">
+    <div class="model-card">
+      <div class="model-card-label">Model I — Simple</div>
+      <h3>The Baseline Spiral</h3>
+      <p>A clean game-theory baseline. Two players, one market. Rates escalate mechanically in response to each other — no friction, no market texture, no intermediary behaviour. It answers: <em>how bad does the spiral get if nothing else changes?</em></p>
+      <ul class="ing-list">
+        <li><span class="ing-dot" style="background:#e8f0ff;color:var(--blue)">R</span><strong>Rate escalation</strong> — quarterly bump = esc × q × 0.5, capped at 1.5× base</li>
+        <li><span class="ing-dot" style="background:#e8f0ff;color:var(--blue)">S</span><strong>Spend</strong> — quarterly revenue × commission-share × rate / 100</li>
+        <li><span class="ing-dot" style="background:#e8f0ff;color:var(--blue)">Δ</span><strong>Overspend</strong> — cumulative delta vs. stable rate held flat throughout</li>
+        <li><span class="ing-dot" style="background:#e8f0ff;color:var(--blue)">M</span><strong>Margin erosion</strong> — final rate minus base rate in percentage points</li>
+      </ul>
+    </div>
+    <div class="model-card adv-card">
+      <div class="model-card-label">Model II — Advanced</div>
+      <h3>The Complete Picture</h3>
+      <p>The same spiral, but with real-world friction. Four forces reshape the financial outcome: diminishing returns on conversion, affiliate rent extraction, demand elasticity segmentation, and a coordinated rate-floor escape valve.</p>
+      <ul class="ing-list">
+        <li><span class="ing-dot" style="background:rgba(212,131,26,0.2);color:#d4831a">↘</span><strong>Diminishing returns</strong> — conversion efficiency decays as rates inflate above saturation</li>
+        <li><span class="ing-dot" style="background:rgba(180,127,255,0.15);color:#a060e0">⊘</span><strong>Affiliate rent</strong> — a share of each rate increase captured by intermediaries, not customers</li>
+        <li><span class="ing-dot" style="background:rgba(26,122,74,0.15);color:#60c090">≠</span><strong>Elasticity segments</strong> — price-sensitive and loyal cohorts respond differently; the spiral buys the wrong customers</li>
+        <li><span class="ing-dot" style="background:rgba(26,74,122,0.15);color:#6090c0">⌀</span><strong>Rate floor</strong> — coordinated market correction if escalation exceeds a threshold</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 02 -->
+  <div class="exp-section-head">
+    <span class="exp-sec-num">02</span>
+    <span class="exp-sec-title">The Core Formulas</span>
+  </div>
+
+  <div class="formula-block" style="margin-bottom:14px;">
+    <div class="formula-label-sm">Simple Model — Rate & Spend at Quarter q</div>
+    <div class="formula">
+      <span class="fv">rate(q)</span> <span class="fop">=</span> <span class="fv">baseRate</span> <span class="fop">+</span> min( <span class="fv">escalation</span> <span class="fop">×</span> q <span class="fop">×</span> 0.5 , <span class="fv">baseRate</span> <span class="fop">×</span> 1.5 )<br>
+      <span class="fv">spend(q)</span> <span class="fop">=</span> ( <span class="fv">annRevenue</span> <span class="fop">×</span> <span class="fv">commShare</span> <span class="fop">/</span> 4 ) <span class="fop">×</span> <span class="fv">rate(q)</span> <span class="fop">/</span> 100<br>
+      <span class="fv">overspend</span> <span class="fop">=</span> Σ [ <span class="fv">spend(q)</span> <span class="fop">−</span> <span class="fv">stableSpend(q)</span> ]
+    </div>
+    <div class="formula-desc">Rate grows linearly each quarter, capped at 150% of base. Spend is revenue × share × rate. Overspend is the running delta against a flat-rate counterfactual. <strong>No feedback loops, no behavioural effects.</strong></div>
+  </div>
+
+  <div class="formula-block adv-fb">
+    <div class="formula-label-sm">Advanced Model — Four Layered Adjustments</div>
+    <div class="formula">
+      <span class="fcm">// 1. Diminishing returns on conversion efficiency</span><br>
+      <span class="fva">convEff(q)</span> <span class="fop">=</span> 1 <span class="fop">/</span> ( 1 <span class="fop">+</span> <span class="fva">dimFactor</span> <span class="fop">×</span> ( rate(q) <span class="fop">−</span> base ) <span class="fop">/</span> base )<br><br>
+      <span class="fcm">// 2. Revenue actually generated (incremental spend × elasticity × conversion)</span><br>
+      <span class="fvp">revenueGen(q)</span> <span class="fop">=</span> baseRev <span class="fop">+</span> extraSpend(q) <span class="fop">×</span> <span class="fvp">elasticity</span> <span class="fop">×</span> <span class="fva">convEff(q)</span><br><br>
+      <span class="fcm">// 3. Affiliate rent extracted from incremental spend</span><br>
+      <span class="fvw">rent(q)</span> <span class="fop">=</span> extraSpend(q) <span class="fop">×</span> <span class="fvw">rentPct</span><br>
+      <span class="fvp">custValue(q)</span> <span class="fop">=</span> extraSpend(q) <span class="fop">×</span> ( 1 <span class="fop">−</span> <span class="fvw">rentPct</span> )<br><br>
+      <span class="fcm">// 4. Rate floor correction — applied from Q9 if spiral exceeds threshold</span><br>
+      <span class="fva">advRate(q≥8)</span> <span class="fop">=</span> base <span class="fop">+</span> floor<span class="fop">/</span>2 <span class="fop">+</span> ( rate(q) <span class="fop">−</span> threshold ) <span class="fop">×</span> 0.1 <span class="fop">,</span> <span class="fcm">if rate(q) > threshold</span>
+    </div>
+    <div class="formula-desc">Each layer compounds on the previous. Critically: <strong>conversion efficiency reduces the effective yield of every rate increase above base</strong>, so spend rises faster than revenue. The rent layer splits what's left between intermediaries and actual customer acquisition.</div>
+  </div>
+
+  <!-- Section 03 -->
+  <div class="exp-section-head">
+    <span class="exp-sec-num">03</span>
+    <span class="exp-sec-title">The Four Advanced Factors</span>
+    <span class="exp-sec-badge">Advanced Model Only</span>
+  </div>
+
+  <div class="factor-grid">
+    <div class="factor-card fc-amber">
+      <div class="factor-title">Diminishing Returns</div>
+      <div class="factor-sub">Factor I — Conversion Saturation</div>
+      <div class="factor-formula">convEff = 1 / (1 + <strong>dimFactor</strong> × ΔRate / base)</div>
+      <div class="factor-chart-wrap"><canvas id="e_fc1"></canvas></div>
+      <div class="factor-desc">As commission rates rise above market baseline, each additional percentage point buys fewer incremental customers. At 2× the base rate with dimFactor=0.4, conversion yield falls to ~55%. The simple model assumes every rate increase converts at full efficiency.</div>
+    </div>
+    <div class="factor-card fc-purple">
+      <div class="factor-title">Affiliate Rent Extraction</div>
+      <div class="factor-sub">Factor II — Intermediary Capture</div>
+      <div class="factor-formula">rent = extraSpend × <strong>rentPct</strong> → flows to affiliate, not customer</div>
+      <div class="factor-chart-wrap"><canvas id="e_fc2"></canvas></div>
+      <div class="factor-desc">Affiliates capture a portion of each rate increase as pure margin rather than passing it as better offers to customers. At 30% rent extraction, less than half of each incremental commission dollar reaches a customer decision point.</div>
+    </div>
+    <div class="factor-card fc-green">
+      <div class="factor-title">Demand Elasticity Segments</div>
+      <div class="factor-sub">Factor III — Customer Heterogeneity</div>
+      <div class="factor-formula">liftHigh = elast × 1.5 × ΔRate &nbsp;|&nbsp; liftLow = elast × 0.25 × ΔRate</div>
+      <div class="factor-chart-wrap"><canvas id="e_fc3"></canvas></div>
+      <div class="factor-desc">Price-sensitive shoppers switch based on deals; loyal customers are largely unaffected. The spiral primarily attracts high-elasticity customers — who also churn most readily when your competitor outbids you next quarter. You are paying escalating rates to rent promiscuous customers.</div>
+    </div>
+    <div class="factor-card fc-blue">
+      <div class="factor-title">Rate Floor Coordination</div>
+      <div class="factor-sub">Factor IV — Cooperative Escape Valve</div>
+      <div class="factor-formula">advRate = base + floor/2 + (rate − threshold) × 0.1 if triggered</div>
+      <div class="factor-chart-wrap"><canvas id="e_fc4"></canvas></div>
+      <div class="factor-desc">The only stable escape is coordination. If both players agree on a rate ceiling, rates pull back after hitting the threshold. The gap between the spiral and corrected path represents the full monetary value of cooperation — quantifiable and significant.</div>
+    </div>
+  </div>
+
+  <!-- Annotation strip -->
+  <div class="ann-strip">
+    <div class="ann-item">
+      <div class="ann-val" style="color:#c0a060">Simple</div>
+      <div class="ann-lbl">3 inputs · 1 formula</div>
+    </div>
+    <div class="ann-div"></div>
+    <div class="ann-item">
+      <div class="ann-val" style="color:#e07060">Advanced</div>
+      <div class="ann-lbl">7 inputs · 4 layered formulas</div>
+    </div>
+    <div class="ann-div"></div>
+    <div class="ann-item">
+      <div class="ann-val" style="color:#60c090">+4</div>
+      <div class="ann-lbl">factors hidden by simple model</div>
+    </div>
+    <div class="ann-div"></div>
+    <div class="ann-item">
+      <div class="ann-val" style="color:#80a0d0">~20–40%</div>
+      <div class="ann-lbl">additional overspend revealed</div>
+    </div>
+  </div>
+
+  <!-- Section 04 -->
+  <div class="exp-section-head">
+    <span class="exp-sec-num">04</span>
+    <span class="exp-sec-title">Step-by-Step Walkthrough</span>
+  </div>
+
+  <div class="walkthrough">
+    <div class="wt-col">
+      <div class="wt-head" style="color:var(--blue)">Simple Model — What Happens Each Quarter</div>
+      <div class="wt-step">
+        <div class="wt-num">1</div>
+        <div class="wt-body">
+          <div class="wt-title">Rate is calculated</div>
+          <div class="wt-desc">Escalation formula adds a fixed increment each quarter, linearly, until the cap is hit.</div>
+          <div class="wt-code">rate(q) = base + min(esc × q × 0.5, base × 1.5)</div>
+        </div>
+      </div>
+      <div class="wt-step">
+        <div class="wt-num">2</div>
+        <div class="wt-body">
+          <div class="wt-title">Spend is calculated</div>
+          <div class="wt-desc">Revenue through the commission channel multiplied by the current rate. Full stop.</div>
+          <div class="wt-code">spend = (rev × share / 4) × rate / 100</div>
+        </div>
+      </div>
+      <div class="wt-step">
+        <div class="wt-num">3</div>
+        <div class="wt-body">
+          <div class="wt-title">Overspend is tallied</div>
+          <div class="wt-desc">Running difference vs. stable baseline. Every quarter it grows.</div>
+          <div class="wt-code">Σ(spend − stableSpend) across all quarters</div>
+        </div>
+      </div>
+      <div class="wt-step">
+        <div class="wt-num">4</div>
+        <div class="wt-body">
+          <div class="wt-title">Margin erosion reported</div>
+          <div class="wt-desc">Final rate minus base rate equals margin drag in percentage points — a static read on how much the channel has cost.</div>
+          <div class="wt-code">erosion = finalRate − baseRate (pts)</div>
+        </div>
+      </div>
+    </div>
+    <div class="wt-col wt-right">
+      <div class="wt-head" style="color:var(--red)">Advanced Model — What Happens Each Quarter</div>
+      <div class="wt-step">
+        <div class="wt-num">1</div>
+        <div class="wt-body">
+          <div class="wt-title">Rate calculated (with floor check)</div>
+          <div class="wt-desc">Same formula, but if rate exceeds the floor threshold from Q9 onward, a correction pulls rates back toward a coordinated ceiling.</div>
+          <div class="wt-code">advRate = base + floor/2 + (rate−thr)×0.1 if triggered</div>
+        </div>
+      </div>
+      <div class="wt-step">
+        <div class="wt-num">2</div>
+        <div class="wt-body">
+          <div class="wt-title">Conversion efficiency computed</div>
+          <div class="wt-desc">Rate inflation feeds a decay function — telling you how much spend is actually converting customers vs. inflating cost.</div>
+          <div class="wt-code">convEff = 1 / (1 + dimFactor × ΔRate / base)</div>
+        </div>
+      </div>
+      <div class="wt-step">
+        <div class="wt-num">3</div>
+        <div class="wt-body">
+          <div class="wt-title">Revenue generated estimated</div>
+          <div class="wt-desc">Incremental spend × elasticity × convEff. What remains is the true incremental revenue the channel delivers.</div>
+          <div class="wt-code">revenueGen = baseRev + extraSpend × elast × convEff</div>
+        </div>
+      </div>
+      <div class="wt-step">
+        <div class="wt-num">4</div>
+        <div class="wt-body">
+          <div class="wt-title">Rent split from customer value</div>
+          <div class="wt-desc">Of incremental spend not blocked by saturation, a portion is siphoned by affiliates. Only what remains reaches a customer acquisition decision.</div>
+          <div class="wt-code">rent = extraSpend × rentPct &nbsp;|&nbsp; custV = extraSpend × (1−rentPct)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 05 -->
+  <div class="exp-section-head">
+    <span class="exp-sec-num">05</span>
+    <span class="exp-sec-title">What the Models Say Differently</span>
+  </div>
+
+  <div class="big-chart-card">
+    <div class="big-chart-title">Cumulative Overspend — Simple vs. Advanced</div>
+    <div class="big-chart-sub">At default parameters: base 12%, escalation 2%/qtr, $100M revenue, 35% commission share, 0.4 dim factor, 30% rent, 0.8 elasticity, 8pt floor</div>
+    <div class="big-chart-wrap"><canvas id="e_compareChart"></canvas></div>
+  </div>
+
+  <!-- Section 06 -->
+  <div class="exp-section-head">
+    <span class="exp-sec-num">06</span>
+    <span class="exp-sec-title">Factor-by-Factor Comparison</span>
+  </div>
+
+  <table class="delta-table">
+    <thead>
+      <tr>
+        <th style="width:16%">Factor</th>
+        <th style="width:22%">Simple Model</th>
+        <th style="width:22%">Advanced Model</th>
+        <th style="width:24%">What It Changes</th>
+        <th style="width:16%">Materiality</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Commission Rate</strong></td>
+        <td class="td-simple">Linear escalation, hard cap at 1.5× base</td>
+        <td class="td-adv">Same + floor correction from Q9 if triggered</td>
+        <td>With floor active, Y3 rate can be 30–60% lower than no-floor spiral</td>
+        <td><span class="pill pill-h">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Spend</strong></td>
+        <td class="td-simple">Rev × share × rate. Fully mechanical.</td>
+        <td class="td-adv">Same, but split into rent (wasted) and customer value (productive)</td>
+        <td>Up to rentPct% of spend is invisible in simple model — pure affiliate margin</td>
+        <td><span class="pill pill-h">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Conversion / Yield</strong></td>
+        <td class="td-simple">Assumed 100% efficient at every rate level</td>
+        <td class="td-adv">Decays via 1/(1 + dimFactor × ΔRate/base)</td>
+        <td>At 0.4 dim factor and 2× base rate: only 55% efficiency. Simple model overstates yield by ~82%.</td>
+        <td><span class="pill pill-h">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Market Share</strong></td>
+        <td class="td-simple">Hardcoded: ~0% gain (aggressive/delayed), −8% (defect)</td>
+        <td class="td-adv">Derived from elasticity × conversion × extraSpend; segmented</td>
+        <td>Advanced model shows share gains accrue disproportionately from high-churn customers</td>
+        <td><span class="pill pill-m">Medium</span></td>
+      </tr>
+      <tr>
+        <td><strong>Customer Type</strong></td>
+        <td class="td-simple">Monolithic — one undifferentiated pool</td>
+        <td class="td-adv">Two cohorts: price-sensitive (elast × 1.5) and loyal (elast × 0.25)</td>
+        <td>Spiral predominantly attracts high-elasticity customers who switch again next quarter</td>
+        <td><span class="pill pill-m">Medium</span></td>
+      </tr>
+      <tr>
+        <td><strong>Affiliate Behaviour</strong></td>
+        <td class="td-simple">Neutral pass-through. Rate = customer offer.</td>
+        <td class="td-adv">Active rent-seeker. Captures rentPct of incremental spend.</td>
+        <td>At 30% extraction over 10 quarters, affiliates may capture more value than either brand</td>
+        <td><span class="pill pill-h">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Escape Mechanism</strong></td>
+        <td class="td-simple">None. Spiral runs to the cap.</td>
+        <td class="td-adv">Rate floor: coordinated ceiling triggers pull-back from Q9</td>
+        <td>Quantifies the monetary value of cooperation — the gap between floor and no-floor overspend</td>
+        <td><span class="pill pill-m">Medium</span></td>
+      </tr>
+      <tr>
+        <td><strong>Channel ROI</strong></td>
+        <td class="td-simple">Implied positive. More spend = channel works.</td>
+        <td class="td-adv">Explicitly calculated: revenueGen / totalSpend per quarter</td>
+        <td>Advanced model can reveal ROI &lt; 1.0 — the channel destroys value even before competitor spend is considered</td>
+        <td><span class="pill pill-h">High</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+</div>
+</div><!-- /tab-explainer -->
+
+
+<script>
+const QUARTERS = ['Q1','Q2','Q3','Q4','Q5','Q6','Q7','Q8','Q9','Q10','Q11','Q12'];
+const YEARS    = ['Year 1','Year 2','Year 3'];
+let charts = {};
+let currentScenario = 'aggressive';
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  setTimeout(() => {
+    if (name === 'simple')    updateSimple();
+    if (name === 'advanced')  updateAdvanced();
+    if (name === 'explainer') updateExplainer();
+  }, 40);
+}
+
+function setScenario(s) {
+  currentScenario = s;
+  document.querySelectorAll('.scenario').forEach(el => el.classList.remove('active'));
+  document.getElementById('sc-' + s).classList.add('active');
+  updateSimple();
+}
+
+function fmt(n) {
+  if (Math.abs(n) >= 1) return '$' + n.toFixed(1) + 'M';
+  return '$' + (n * 1000).toFixed(0) + 'K';
+}
+
+/* Chart defaults — light palette */
+const CD = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: true, labels: { color: '#7a746a', font: { family: 'IBM Plex Mono', size: 9 }, boxWidth: 10, padding: 12 } } },
+  scales: {
+    x: { ticks: { color: '#7a746a', font: { family: 'IBM Plex Mono', size: 8 } }, grid: { color: '#e8e4dc' }, border: { color: '#d4cfc4' } },
+    y: { ticks: { color: '#7a746a', font: { family: 'IBM Plex Mono', size: 8 } }, grid: { color: '#e8e4dc' }, border: { color: '#d4cfc4' } }
+  }
+};
+
+function mkChart(id, config) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const el = document.getElementById(id);
+  if (!el) return;
+  charts[id] = new Chart(el.getContext('2d'), config);
+}
+
+/* ═══ TAB 1 — SIMPLE ═══ */
+function updateSimple() {
+  const base  = +document.getElementById('baseRate').value;
+  const esc   = +document.getElementById('escalation').value;
+  const rev   = +document.getElementById('revenue').value;
+  const share = +document.getElementById('commShare').value / 100;
+
+  document.getElementById('baseRateVal').textContent   = base + '%';
+  document.getElementById('escalationVal').textContent = esc + '%';
+  document.getElementById('revenueVal').textContent    = '$' + rev + 'M';
+  document.getElementById('commShareVal').textContent  = Math.round(share * 100) + '%';
+
+  const you = [], comp = [], stable = [];
+  for (let q = 0; q < 12; q++) {
+    stable.push(base);
+    if (currentScenario === 'aggressive') {
+      const b = Math.min(esc * q * 0.5, base * 1.5);
+      you.push(+(base + b).toFixed(1));
+      comp.push(+(base + b + (q % 3 === 0 ? 0.3 : -0.1)).toFixed(1));
+    } else if (currentScenario === 'delayed') {
+      you.push(+(base + Math.min(esc * Math.max(q-2,0) * 0.5, base*1.3)).toFixed(1));
+      comp.push(+(base + Math.min(esc * q * 0.5, base*1.5)).toFixed(1));
+    } else {
+      you.push(base);
+      comp.push(+(base + Math.min(esc * q * 0.55, base*1.6)).toFixed(1));
+    }
+  }
+
+  const qRev = (rev * share) / 4;
+  const yS  = you.map(r    => +(qRev * r / 100).toFixed(3));
+  const cS  = comp.map(r   => +(qRev * r / 100).toFixed(3));
+  const stS = stable.map(r => +(qRev * r / 100).toFixed(3));
+
+  const cumY = yS.reduce((a,b)=>a+b,0);
+  const cumSt = stS.reduce((a,b)=>a+b,0);
+  const overspend = cumY - cumSt;
+  const finalRate = you[11];
+  const erosion   = finalRate - base;
+
+  document.getElementById('s1').textContent = finalRate.toFixed(1) + '%';
+  document.getElementById('s2').textContent = fmt(overspend);
+  document.getElementById('s3').textContent = erosion.toFixed(1) + 'pts';
+  document.getElementById('s4').textContent = currentScenario === 'defect' ? '−8%' : '~0%';
+
+  const annY  = [0,1,2].map(y => yS.slice(y*4,y*4+4).reduce((a,b)=>a+b,0));
+  const annC  = [0,1,2].map(y => cS.slice(y*4,y*4+4).reduce((a,b)=>a+b,0));
+  const annSt = [0,1,2].map(y => stS.slice(y*4,y*4+4).reduce((a,b)=>a+b,0));
+  const mY    = annY.map(s  => -((s/rev)*100));
+  const mSt   = annSt.map(s => -((s/rev)*100));
+
+  let run = 0;
+  const prem = yS.map((v,i) => { run += v - stS[i]; return +run.toFixed(3); });
+
+  mkChart('rateChart', { type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Your Rate', data:you, borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.07)', tension:0.4, pointRadius:3, pointBackgroundColor:'#c0392b', borderWidth:2, fill:true },
+    { label:'Competitor', data:comp, borderColor:'#1a4a7a', backgroundColor:'rgba(26,74,122,0.04)', tension:0.4, pointRadius:3, pointBackgroundColor:'#1a4a7a', borderWidth:2, borderDash:[4,3] },
+    { label:'Stable Baseline', data:stable, borderColor:'#d4cfc4', tension:0, pointRadius:0, borderWidth:1, borderDash:[2,4] }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'Commission %',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('spendChart', { type:'bar', data:{ labels:YEARS, datasets:[
+    { label:'Your Spend', data:annY,  backgroundColor:'rgba(192,57,43,0.7)', borderRadius:2 },
+    { label:'Competitor', data:annC,  backgroundColor:'rgba(26,74,122,0.5)', borderRadius:2 },
+    { label:'Stable Baseline', data:annSt, backgroundColor:'rgba(26,26,26,0.06)', borderRadius:2 }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'$M',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('marginChart', { type:'line', data:{ labels:YEARS, datasets:[
+    { label:'Spiral Drag', data:mY,  borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.12)', tension:0.3, fill:true, pointRadius:5, pointBackgroundColor:'#c0392b', borderWidth:2 },
+    { label:'Stable Drag', data:mSt, borderColor:'#1a7a4a', backgroundColor:'rgba(26,122,74,0.08)', tension:0.3, fill:true, pointRadius:5, pointBackgroundColor:'#1a7a4a', borderWidth:2 }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'% of Rev',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('premiumChart', { type:'bar', data:{ labels:QUARTERS, datasets:[
+    { label:'Cumulative Overspend ($M)', data:prem, backgroundColor:prem.map(v=>v>0?'rgba(192,57,43,0.65)':'rgba(26,122,74,0.65)'), borderRadius:2 }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'$M excess',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  const iMap = {
+    aggressive:`In a fully symmetric tit-for-tat escalation, both players reach ${finalRate.toFixed(1)}% by Year 3 — ${erosion.toFixed(1)}pts above baseline. Combined commission spend inflates by ~${fmt(overspend*2)} while neither party gains lasting share. The classic <strong style="color:var(--amber)">prisoner's dilemma</strong>: individually rational, collectively irrational.`,
+    delayed:`With a 2-quarter lag you avoid ${fmt(overspend*0.4)} of early overspend, but once you match rates the same spiral resumes. <strong style="color:var(--amber)">Delayed tit-for-tat prolongs the spiral</strong> rather than preventing it.`,
+    defect:`Holding your rate creates an 8–15% short-term share shift toward the competitor, but your margin improves by ${erosion.toFixed(1)}pts and you avoid ${fmt(overspend)}. With sufficient differentiation, <strong style="color:var(--green)">rate discipline is the dominant strategy</strong>.`
+  };
+  const pMap = {
+    aggressive:[{l:'Opening Salvo',c:var_amber,q:'1–2'},{l:'Escalation Zone',c:var_red,q:'3–8'},{l:'Rate Lock-in',c:'#7a746a',q:'9–12'}],
+    delayed:[{l:'Gap Period',c:var_green,q:'1–2'},{l:'Catch-up',c:var_amber,q:'3–6'},{l:'Parity Spiral',c:var_red,q:'7–12'}],
+    defect:[{l:'Share Bleed',c:var_red,q:'1–4'},{l:'Margin Recovery',c:var_green,q:'5–8'},{l:'New Equilibrium',c:var_blue,q:'9–12'}]
+  };
+
+  document.getElementById('insight').innerHTML = iMap[currentScenario];
+  document.getElementById('phases').innerHTML = pMap[currentScenario].map(p =>
+    `<div class="phase-dot" style="background:${p.c}1a;color:${p.c};border:1px solid ${p.c}55;">${p.l} (Q${p.q})</div>`
+  ).join('');
+}
+
+/* ═══ TAB 2 — ADVANCED ═══ */
+function updateAdvanced() {
+  const base    = +document.getElementById('a_baseRate').value;
+  const esc     = +document.getElementById('a_escalation').value;
+  const rev     = +document.getElementById('a_revenue').value;
+  const share   = +document.getElementById('a_commShare').value / 100;
+  const dimRet  = +document.getElementById('a_dimRet').value;
+  const rentPct = +document.getElementById('a_rent').value / 100;
+  const elast   = +document.getElementById('a_elast').value;
+  const floor   = +document.getElementById('a_floor').value;
+
+  document.getElementById('a_baseRateVal').textContent   = base + '%';
+  document.getElementById('a_escalationVal').textContent = esc + '%';
+  document.getElementById('a_revenueVal').textContent    = '$' + rev + 'M';
+  document.getElementById('a_commShareVal').textContent  = Math.round(share*100) + '%';
+  document.getElementById('a_dimRetVal').textContent     = dimRet.toFixed(2);
+  document.getElementById('a_rentVal').textContent       = Math.round(rentPct*100) + '%';
+  document.getElementById('a_elastVal').textContent      = elast.toFixed(1);
+  document.getElementById('a_floorVal').textContent      = floor + 'pts';
+
+  const qRev = (rev * share) / 4;
+  const thr  = base + floor;
+
+  const simRates = [], advRates = [], stRates = [];
+  for (let q = 0; q < 12; q++) {
+    const r = +(base + Math.min(esc * q * 0.5, base * 1.5)).toFixed(1);
+    simRates.push(r); stRates.push(base);
+    advRates.push(q >= 8 && r > thr ? +(base + floor*0.5 + (r-thr)*0.1).toFixed(1) : r);
+  }
+  const floorTriggered = simRates.some(r => r > thr);
+  const convEff = advRates.map(r => +(1/(1 + dimRet * Math.max(r-base,0)/base)).toFixed(4));
+
+  const simSpend = simRates.map(r => +(qRev * r / 100).toFixed(4));
+  const advSpend = advRates.map(r => +(qRev * r / 100).toFixed(4));
+  const stSpend  = stRates.map(r  => +(qRev * r / 100).toFixed(4));
+
+  const commRevGen = advRates.map((r,q) => {
+    const ex = Math.max(advSpend[q] - stSpend[q], 0);
+    return +(qRev + ex * elast * convEff[q]).toFixed(4);
+  });
+
+  const rent  = advSpend.map((s,q) => +(Math.max(s-stSpend[q],0)*rentPct).toFixed(4));
+  const custV = advSpend.map((s,q) => +(Math.max(s-stSpend[q],0)*(1-rentPct)).toFixed(4));
+  const highEl = advRates.map(r => +(elast*1.5*Math.max(r-base,0)*0.012).toFixed(4));
+  const lowEl  = advRates.map(r => +(elast*0.25*Math.max(r-base,0)*0.012).toFixed(4));
+
+  let cs=0, ca=0;
+  const cumSim=[], cumAdv=[];
+  for (let q=0;q<12;q++) {
+    cs += simSpend[q]-stSpend[q]; ca += advSpend[q]-stSpend[q];
+    cumSim.push(+cs.toFixed(3)); cumAdv.push(+ca.toFixed(3));
+  }
+
+  const annAdv  = [0,1,2].map(y => advSpend.slice(y*4,y*4+4).reduce((a,b)=>a+b,0));
+  const annRent = [0,1,2].map(y => rent.slice(y*4,y*4+4).reduce((a,b)=>a+b,0));
+  const annCust = [0,1,2].map(y => custV.slice(y*4,y*4+4).reduce((a,b)=>a+b,0));
+
+  const totalRent  = rent.reduce((a,b)=>a+b,0);
+  const totalRev   = commRevGen.reduce((a,b)=>a+b,0);
+  const totalSpend = advSpend.reduce((a,b)=>a+b,0);
+  const roi = (totalRev/totalSpend).toFixed(2);
+
+  document.getElementById('a_s1').textContent = (convEff[11]*100).toFixed(0) + '%';
+  document.getElementById('a_s2').textContent = fmt(totalRent);
+  document.getElementById('a_s3').textContent = '$' + roi;
+  document.getElementById('a_s4').textContent = floorTriggered ? 'YES' : 'NO';
+  document.getElementById('a_s4').className   = 'stat-val ' + (floorTriggered ? 'c-green' : 'c-amber');
+  document.getElementById('a_s5').textContent = fmt(Math.abs(cumAdv[11]-cumSim[11]));
+
+  mkChart('a_roiChart', { type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Commission Spend', data:advSpend.map(v=>+v.toFixed(2)), borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.08)', tension:0.4, fill:true, pointRadius:2, borderWidth:2 },
+    { label:'Revenue Generated', data:commRevGen.map(v=>+v.toFixed(2)), borderColor:'#1a7a4a', backgroundColor:'rgba(26,122,74,0.08)', tension:0.4, fill:true, pointRadius:2, borderWidth:2 },
+    { label:'Stable Spend', data:stSpend.map(v=>+v.toFixed(2)), borderColor:'#d4cfc4', tension:0, pointRadius:0, borderWidth:1, borderDash:[2,4] }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'$M/qtr',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('a_convChart', { type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Conversion Efficiency (%)', data:convEff.map(v=>+(v*100).toFixed(1)), borderColor:'#d4831a', backgroundColor:'rgba(212,131,26,0.1)', tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#d4831a', borderWidth:2 }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, min:0, max:110, title:{display:true,text:'% of baseline',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('a_rentChart', { type:'bar', data:{ labels:YEARS, datasets:[
+    { label:'Affiliate Rent', data:annRent.map(v=>+v.toFixed(2)), backgroundColor:'rgba(90,26,122,0.65)', borderRadius:2 },
+    { label:'Customer Value', data:annCust.map(v=>+v.toFixed(2)), backgroundColor:'rgba(26,122,74,0.55)', borderRadius:2 }
+  ]}, options:{...CD, scales:{...CD.scales, x:{...CD.scales.x, stacked:true}, y:{...CD.scales.y, stacked:true, title:{display:true,text:'$M',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('a_elastChart', { type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Price-Sensitive', data:highEl.map(v=>+(v*100).toFixed(2)), borderColor:'#1a4a7a', tension:0.4, pointRadius:2, borderWidth:2, fill:false },
+    { label:'Loyal/Sticky',   data:lowEl.map(v=>+(v*100).toFixed(2)),  borderColor:'#1a7a4a', tension:0.4, pointRadius:2, borderWidth:2, borderDash:[4,3], fill:false }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'% share lift',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('a_floorChart', { type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'No Floor (Spiral)',  data:simRates, borderColor:'#c0392b', tension:0.4, pointRadius:2, borderWidth:2 },
+    { label:'With Rate Floor',   data:advRates, borderColor:'#1a7a4a', tension:0.4, pointRadius:2, borderWidth:2, borderDash:[5,3] },
+    { label:'Stable Baseline',   data:stRates,  borderColor:'#d4cfc4', tension:0, pointRadius:0, borderWidth:1, borderDash:[2,4] }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'Commission %',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  mkChart('a_compareChart', { type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Simple Model Overspend', data:cumSim, borderColor:'#1a4a7a', backgroundColor:'rgba(26,74,122,0.07)', tension:0.3, fill:true, pointRadius:2, borderWidth:2 },
+    { label:'Advanced Model Overspend', data:cumAdv, borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.07)', tension:0.3, fill:true, pointRadius:2, borderWidth:2, borderDash:[5,2] }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'$M cumulative',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}} });
+
+  const floorNote = floorTriggered
+    ? `Rate escalation <strong style="color:var(--green)">triggers the floor at +${floor}pts</strong>, pulling rates back from Q9 — saving ~${fmt(Math.max(cumSim[11]-cumAdv[11],0))} vs. the unconstrained spiral.`
+    : `Escalation does <strong style="color:var(--amber)">not reach the floor threshold</strong> of +${floor}pts — coordination is available but not yet necessary.`;
+
+  document.getElementById('a_insight').innerHTML =
+    `By Year 3, conversion efficiency has fallen to <strong style="color:var(--amber)">${(convEff[11]*100).toFixed(0)}%</strong> of baseline — meaning ${(100-convEff[11]*100).toFixed(0)}% of rate increases above base deliver zero net customers, purely inflating cost. Of incremental commission spend, <strong style="color:var(--purple)">${fmt(totalRent)}</strong> is captured as affiliate rent. The all-in channel ROI is <strong style="color:var(--green)">$${roi} per $1 spent</strong>${parseFloat(roi)<1.5?' — near or below breakeven':' — still positive but deteriorating'}. ${floorNote}`;
+
+  const advPhases = [
+    {l:'Efficient Zone',c:var_green,q:'1–3'},
+    {l:'Returns Eroding',c:var_amber,q:'4–7'},
+    {l:'Rent Dominates',c:var_purple,q:'8–10'},
+    {l:floorTriggered?'Floor Correction':'Runaway Spiral',c:floorTriggered?var_blue:var_red,q:'11–12'}
+  ];
+  document.getElementById('a_phases').innerHTML = advPhases.map(p =>
+    `<div class="phase-dot" style="background:${p.c}1a;color:${p.c};border:1px solid ${p.c}55;">${p.l} (Q${p.q})</div>`
+  ).join('');
+}
+
+/* ═══ TAB 3 — EXPLAINER CHARTS ═══ */
+function updateExplainer() {
+  const base=12, esc=2, elast=0.8, floor=8, dimRet=0.4, rentPct=0.30;
+  const simRates=[], advRates=[], stRates=[];
+  const thr = base+floor;
+  for(let q=0;q<12;q++){
+    const r=+(base+Math.min(esc*q*0.5,base*1.5)).toFixed(1);
+    simRates.push(r); stRates.push(base);
+    advRates.push(q>=8&&r>thr?+(base+floor*0.5+(r-thr)*0.1).toFixed(1):r);
+  }
+  const qRev=(100*0.35)/4;
+  const simSpend=simRates.map(r=>+(qRev*r/100).toFixed(4));
+  const advSpend=advRates.map(r=>+(qRev*r/100).toFixed(4));
+  const stSpend=stRates.map(r=>+(qRev*r/100).toFixed(4));
+  let cs=0,ca=0; const cumSim=[],cumAdv=[];
+  for(let q=0;q<12;q++){
+    cs+=simSpend[q]-stSpend[q]; ca+=advSpend[q]-stSpend[q];
+    cumSim.push(+cs.toFixed(3)); cumAdv.push(+ca.toFixed(3));
+  }
+
+  /* FC1: Conversion efficiency decay across dim factors */
+  const dimFactors=[0,0.2,0.4,0.7,1.0];
+  const rInc=[0,2,4,6,8,10,12];
+  mkChart('e_fc1',{ type:'line', data:{ labels:rInc.map(r=>'+'+r+'pts'), datasets:dimFactors.map((df,i)=>({
+    label:'factor='+df,
+    data:rInc.map(dr=>+(1/(1+df*dr/base)*100).toFixed(1)),
+    borderColor:['#d4cfc4','#d4aa60','#d4831a','#a05010','#6a2000'][i],
+    borderWidth:i===2?2.5:1.5, pointRadius:0, tension:0.4, fill:false
+  }))}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y,min:0,max:110,title:{display:true,text:'conv %',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}}});
+
+  /* FC2: Rent split */
+  const rPcts=[0.1,0.2,0.3,0.4,0.5];
+  mkChart('e_fc2',{ type:'bar', data:{ labels:rPcts.map(r=>Math.round(r*100)+'% rent'), datasets:[
+    { label:'Affiliate Rent',    data:rPcts.map(r=>Math.round(r*100)),     backgroundColor:'rgba(90,26,122,0.65)', borderRadius:2 },
+    { label:'Customer Value',    data:rPcts.map(r=>Math.round((1-r)*100)), backgroundColor:'rgba(26,122,74,0.55)', borderRadius:2 }
+  ]}, options:{...CD, scales:{...CD.scales, x:{...CD.scales.x,stacked:true}, y:{...CD.scales.y,stacked:true,max:100,title:{display:true,text:'% of extra spend',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}}});
+
+  /* FC3: Elasticity segments */
+  mkChart('e_fc3',{ type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Price-sensitive', data:simRates.map(r=>+(elast*1.5*Math.max(r-base,0)*0.012*100).toFixed(2)), borderColor:'#1a4a7a', borderWidth:2, tension:0.4, pointRadius:0, fill:false },
+    { label:'Loyal/sticky',   data:simRates.map(r=>+(elast*0.25*Math.max(r-base,0)*0.012*100).toFixed(2)), borderColor:'#1a7a4a', borderWidth:2, tension:0.4, pointRadius:0, borderDash:[4,3], fill:false }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y,title:{display:true,text:'% share lift',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}}});
+
+  /* FC4: Floor comparison */
+  mkChart('e_fc4',{ type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'No floor',        data:simRates, borderColor:'#c0392b', borderWidth:2, tension:0.4, pointRadius:0 },
+    { label:'With floor (+8pts)', data:advRates, borderColor:'#1a4a7a', borderWidth:2, tension:0.4, pointRadius:0, borderDash:[5,3] },
+    { label:'Stable baseline', data:stRates,  borderColor:'#d4cfc4', borderWidth:1, pointRadius:0, borderDash:[2,4] }
+  ]}, options:{...CD, scales:{...CD.scales, y:{...CD.scales.y,title:{display:true,text:'commission %',color:'#7a746a',font:{family:'IBM Plex Mono',size:8}}}}}});
+
+  /* Big compare */
+  mkChart('e_compareChart',{ type:'line', data:{ labels:QUARTERS, datasets:[
+    { label:'Simple Model overspend ($M)', data:cumSim, borderColor:'#1a4a7a', backgroundColor:'rgba(26,74,122,0.07)', borderWidth:2.5, tension:0.3, fill:true, pointRadius:3, pointBackgroundColor:'#1a4a7a' },
+    { label:'Advanced Model overspend ($M)', data:cumAdv, borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.07)', borderWidth:2.5, tension:0.3, fill:true, pointRadius:3, pointBackgroundColor:'#c0392b', borderDash:[6,3] },
+    { label:'Zero line (stable baseline)', data:QUARTERS.map(()=>0), borderColor:'#d4cfc4', borderWidth:1, pointRadius:0, borderDash:[2,4], fill:false }
+  ]}, options:{...CD,
+    plugins:{...CD.plugins, legend:{...CD.plugins.legend, labels:{...CD.plugins.legend.labels, font:{family:'IBM Plex Mono',size:9}, boxWidth:12, padding:18}}},
+    scales:{...CD.scales, y:{...CD.scales.y, title:{display:true,text:'$M cumulative overspend vs. stable',color:'#7a746a',font:{family:'IBM Plex Mono',size:9}}}}}
+  });
+}
+
+/* Colour constants for phase dots */
+const var_red='#c0392b', var_amber='#d4831a', var_green='#1a7a4a', var_blue='#1a4a7a', var_purple='#5a1a7a';
+
+/* Init */
+updateSimple();
+updateAdvanced();
+updateExplainer();
+</script>
+</body>
+</html>
